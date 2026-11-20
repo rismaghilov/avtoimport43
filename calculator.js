@@ -12,6 +12,12 @@ const valid=x=>Number.isFinite(x)&&x>0;
 const cap=(max)=>max===null?Infinity:max;
 const bracket=(rows,value)=>rows.find(row=>value<=cap(row[0])) || rows[rows.length-1];
 const labelMap={lt3:'до 3 лет','3to5':'3–5 лет','5to7':'5–7 лет',gt7:'старше 7 лет',ice:'бензин/дизель',private:'физлицо для себя',business:'юрлицо или ИП'};
+// Ориентировочные расходы до российского этапа доставки; указаны в валюте покупки.
+const originLogistics={
+ JPY:{amount:120000,title:'Фрахт до Владивостока (Япония)',note:'120 000 ¥ · зависит от порта отправления'},
+ CNY:{amount:10000,title:'Логистика по Китаю',note:'10 000 ¥ · зависит от расстояния'},
+ KRW:{amount:1600000,title:'Фрахт Пусан — Владивосток (Корея)',note:'1 600 000 ₩ · порт Пусан — Владивосток'}
+};
 function saved(k){try{return localStorage.getItem(k)}catch{return null}}
 function save(k,v){try{localStorage.setItem(k,v)}catch{}}
 function dateLabel(str){const d=new Date(str);return Number.isFinite(d.valueOf())?d.toLocaleDateString('ru-RU'):'неизвестно'}
@@ -70,8 +76,10 @@ function compute(x){
  if(!valid(util))return null;
  // Комиссия банка: 2% стоимости покупки автомобиля только для Китая (CNY).
  const bankFee=state.currency==='CNY'?carRub*.02:0;
- const total=carRub+duty.rub+excise+vat+util+clearance+T.broker+bankFee;
- return {carRub,duty,excise,vat,util,clearance,broker:T.broker,bankFee,total};
+ const logistics=originLogistics[state.currency];
+ const logisticsRub=logistics?logistics.amount*rate:0;
+ const total=carRub+duty.rub+excise+vat+util+clearance+T.broker+bankFee+logisticsRub;
+ return {carRub,duty,excise,vat,util,clearance,broker:T.broker,bankFee,logistics,logisticsRub,total};
 }
 const wa='https://wa.me/79536863030?text=';
 const tg='https://t.me/AVTOIMPORT43';
@@ -94,6 +102,7 @@ function calc(){
  }
  addLine('Стоимость автомобиля',fmt(result.carRub),`${price.toLocaleString('ru-RU')} ${state.currency} × ${rate.toFixed(4)} ₽`);
  if(result.bankFee>0)addLine('Комиссия банка (Китай, 2%)',fmt(result.bankFee),'2% от стоимости автомобиля');
+ if(result.logistics)addLine(result.logistics.title,fmt(result.logisticsRub),result.logistics.note);
  addLine('Таможенная пошлина',fmt(result.duty.rub),result.duty.how);
  if(result.excise>0)addLine('Акциз',fmt(result.excise),'Для коммерческого ввоза');
  if(result.vat>0)addLine('НДС 22%',fmt(result.vat),'Для коммерческого ввоза');
@@ -104,14 +113,14 @@ function calc(){
  const rateOk=source==='live'||source==='cache';
  const total=rateOk?fmt(result.total):'Уточните стоимость';
  q('calc-total').textContent=total;
- q('calc-caption').textContent='Без доставки и услуг Автоимпорт43 — их стоимость уточняйте у специалиста.';
+ q('calc-caption').textContent='Включена указанная логистика за рубежом. Доставка по России и дополнительные услуги Автоимпорт43 рассчитываются отдельно.';
  q('calc-warning').textContent='Предварительная сумма. Условия ввоза и итоговые платежи подтверждаются при оформлении.';
  const parts=['Здравствуйте! Хочу уточнить стоимость автомобиля.',params,'Курс ЦБ на '+dateLabel(rateDate),
-  'Машина: '+fmt(result.carRub),...(result.bankFee>0?['Комиссия банка (Китай, 2%): '+fmt(result.bankFee)]:[]),'Пошлина: '+fmt(result.duty.rub),
+  'Машина: '+fmt(result.carRub),...(result.bankFee>0?['Комиссия банка (Китай, 2%): '+fmt(result.bankFee)]:[]),...(result.logistics? [result.logistics.title+': '+fmt(result.logisticsRub)+' ('+result.logistics.note+')']:[]),'Пошлина: '+fmt(result.duty.rub),
   ...(result.excise?['Акциз: '+fmt(result.excise)]:[]),...(result.vat?['НДС: '+fmt(result.vat)]:[]),
   'Утильсбор: '+fmt(result.util),'Таможенный сбор: '+fmt(result.clearance),
   'Услуги брокера: '+fmt(result.broker),'Предварительный итог: '+total,
-  'Доставка и услуги Автоимпорт43 — отдельно.','Уточните, пожалуйста, цену под ключ.'];
+  'Логистика за рубежом ориентировочная; доставка по России и дополнительные услуги Автоимпорт43 — отдельно.','Уточните, пожалуйста, цену под ключ.'];
  updateMessages(parts.join('\n'));
 }
 for(const group of document.querySelectorAll('#calculate .calc-choices[data-key]'))group.addEventListener('click',e=>{
